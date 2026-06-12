@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: attendance_postgres
+    environment:
+      POSTGRES_DB: attendance_db
+      POSTGRES_USER: attendance_user
+      POSTGRES_PASSWORD: attendance_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U attendance_user -d attendance_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: attendance_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: attendance_backend
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgresql://attendance_user:attendance_pass@postgres:5432/attendance_db
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-dev_jwt_secret_change_in_production}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev_refresh_secret_change_in_production}
+      PORT: 4000
+      FACE_SERVICE_PROVIDER: ${FACE_SERVICE_PROVIDER:-mock}
+      FACE_SERVICE_API_KEY: ${FACE_SERVICE_API_KEY:-}
+      FACE_CONFIDENCE_THRESHOLD: ${FACE_CONFIDENCE_THRESHOLD:-0.85}
+      QR_TOKEN_EXPIRY_MINUTES: ${QR_TOKEN_EXPIRY_MINUTES:-10}
+      GEOFENCE_RADIUS_METERS: ${GEOFENCE_RADIUS_METERS:-100}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-dev_encryption_key_32_chars_min_ok}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: npm run dev
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: attendance_frontend
+    environment:
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:4000}
+      REACT_APP_FACE_CAPTURE_TIMEOUT: ${REACT_APP_FACE_CAPTURE_TIMEOUT:-30000}
+      REACT_APP_GEOLOCATION_TIMEOUT: ${REACT_APP_GEOLOCATION_TIMEOUT:-10000}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+    command: npm run dev -- --host
+
+volumes:
+  postgres_data:
+  redis_data:
