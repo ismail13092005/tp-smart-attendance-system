@@ -34,6 +34,14 @@ function save(doc: jsPDF, filename: string) {
   doc.save(`${filename}-${new Date().toISOString().slice(0, 10)}.pdf`);
 }
 
+function statusColor(status: string): [number, number, number] {
+  if (status === 'PRESENT')    return [22, 163, 74];
+  if (status === 'LATE')       return [234, 179, 8];
+  if (status === 'ABSENT')     return [239, 68, 68];
+  if (status === 'NOT MARKED') return [156, 163, 175];
+  return [0, 0, 0];
+}
+
 // ── Student: attendance history PDF ──────────────────────────────────────────
 
 export interface HistoryRow {
@@ -77,18 +85,14 @@ export function exportStudentAttendancePDF(
     headStyles: { fillColor: [59, 130, 246], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
-      5: {
-        fontStyle: 'bold',
-        textColor: (data: { cell: { raw: string } }) => {
-          const s = data.cell.raw as string;
-          if (s === 'PRESENT') return [22, 163, 74];
-          if (s === 'LATE')    return [234, 179, 8];
-          if (s === 'ABSENT')  return [239, 68, 68];
-          return [0, 0, 0];
-        },
-      },
+      5: { fontStyle: 'bold' },
     },
-    didDrawPage: (data: { pageNumber: number }) => {
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 5) {
+        data.cell.styles.textColor = statusColor(String(data.cell.raw));
+      }
+    },
+    didDrawPage: (data) => {
       doc.setFontSize(7);
       doc.setTextColor(150);
       doc.text(`Page ${data.pageNumber}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 8);
@@ -164,19 +168,14 @@ export function exportSessionSheetPDF(session: SessionInfo, rows: SheetRow[]) {
     headStyles: { fillColor: [109, 40, 217], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [248, 250, 252] },
     columnStyles: {
-      4: {
-        fontStyle: 'bold',
-        textColor: (data: { cell: { raw: string } }) => {
-          const s = data.cell.raw as string;
-          if (s === 'PRESENT')    return [22, 163, 74];
-          if (s === 'LATE')       return [234, 179, 8];
-          if (s === 'ABSENT')     return [239, 68, 68];
-          if (s === 'NOT MARKED') return [156, 163, 175];
-          return [0, 0, 0];
-        },
-      },
+      4: { fontStyle: 'bold' },
     },
-    didDrawPage: (data: { pageNumber: number }) => {
+    didParseCell: (data) => {
+      if (data.section === 'body' && data.column.index === 4) {
+        data.cell.styles.textColor = statusColor(String(data.cell.raw));
+      }
+    },
+    didDrawPage: (data) => {
       doc.setFontSize(7);
       doc.setTextColor(150);
       doc.text(`Page ${data.pageNumber}`, doc.internal.pageSize.width - 20, doc.internal.pageSize.height - 8);
